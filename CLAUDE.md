@@ -42,7 +42,7 @@ Python target: **3.12** (CI also exercises 3.11; `requires-python >= 3.11`).
 | Milestone | Description (spec §17.3) | Status |
 |-----------|--------------------------|--------|
 | M0 | Skeleton, typed config from §14, G-parameter assertions, logging, CI, secrets handling | ✅ Done — 44/44 tests pass |
-| M1 | Data layer — downloaders, raw store, QC report, resampling, spread series, s_norm, DXY source/synthetic index, dataset manifest | 🔜 Next |
+| M1 | Data layer — downloaders, raw store, QC report, resampling, spread series, s_norm, DXY source/synthetic index, dataset manifest | 🔧 In progress — offline code + tests done (see "M1 progress"); no real data downloaded yet |
 | M2 | Primitives (§4.3) and time services: session clock, calendar integration, calm test, DST tests, 20 hand-labelled setups | |
 | M3 | Bias (§6) and cascade (§8–§11) in the state machine, incl. G10, deferred placement, rejection log | |
 | M4 | Backtester and cost model: simulated adapter, bid/ask fills, §15.4 reports, spread-sensitivity surface, null-model benchmark | |
@@ -52,7 +52,7 @@ Python target: **3.12** (CI also exercises 3.11; `requires-python >= 3.11`).
 
 Each milestone has an exit criterion that must be met before the next begins.
 
-**Start here: M1.**
+**Current work: finish M1 (see "M1 progress").**
 
 ---
 
@@ -99,6 +99,24 @@ The DXY reference check is: if a synthetic dollar index is used, its **return co
 Engineering check (not a spec exit criterion): M5/M15/H1… resampled from M1 should match the same bars resampled directly from ticks.
 
 M1 data requirements by series (§4.1): traded pair bid/ask at M1–W1 (5 yrs); DXY OHLC at M1, M5, M15, H1, D1 (5 yrs); partner pair OHLC at M5, M15; spread series at M1 (≥ 1 year of real quotes — backtests with an assumed constant spread are not admissible for V3).
+
+### M1 progress
+
+Built and unit-tested offline in `fx_engine/data/` (`tests/test_data.py`, synthetic data only, no network):
+
+| Module | Does | Notes |
+|--------|------|-------|
+| `instruments.py` | 8 traded + reference series, timeframes, DXY exponents, Dukascopy point values | point values UNVERIFIED |
+| `timeutil.py` | UTC→NY, 17:00-NY anchored H4/D1/W1 bar starts, session label (closing date), DST dates | wall-clock bins; fall-back day repeated hour shares one H4 bin |
+| `resample.py` | ticks→M1→M5/M15/H1/H4/D1/W1, bid/ask/mid OHLC, `ticks`, `spread` | M1 `spread` = ask_close − bid_close |
+| `store.py` | immutable parquet store, sha256 sidecar, atomic write, verified read | |
+| `snorm.py` | §4.4 `s_norm`: pooled median, same 5-min NY bucket, trailing 20 sessions, no look-ahead, neighbour fallback, NaN (fail closed) when history is short | event-distorted mask is a hook; needs the M2 calendar |
+| `dxy.py` | synthetic DXY (§17.2), stale-component fail-closed, reference check (corr ≥ 0.99) | level-MAE threshold 0.5 is MY placeholder, spec says only "small" |
+| `qc.py` | gaps, weekend-aware, duplicates, crossed quotes, spread outliers, jumps, DST-day coverage, pass/fail | thresholds are engineering placeholders, not §14 params |
+| `manifest.py` | manifest + dataset hash; atomic write; refuses if any QC failed | |
+| `dukascopy.py` | URL builder, `.bi5` decoder, hourly fetch, per-day immutable download | **never run against the real server** |
+
+Still to do for the M1 exit criterion: clear Dukascopy licence terms; one-hour smoke test of the decoder (URL layout, record layout, scaling, bid+ask present); a driver that downloads 5 years, runs QC per instrument, writes M1–W1 bars and the manifest; decide the dollar-index source and pass the ≥ 0.99 reference check (needs a real DXY reference series); real-quote spread history ≥ 1 year for the cost model.
 
 ### Traded instruments (Table 2.1)
 
