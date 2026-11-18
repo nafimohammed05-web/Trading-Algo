@@ -116,7 +116,9 @@ Built and unit-tested offline in `fx_engine/data/` (`tests/test_data.py`, synthe
 | `manifest.py` | manifest + dataset hash; atomic write; refuses if any QC failed | |
 | `dukascopy.py` | URL builder, `.bi5` decoder, hourly fetch, per-day immutable download | **never run against the real server** |
 
-Still to do for the M1 exit criterion: clear Dukascopy licence terms; one-hour smoke test of the decoder (URL layout, record layout, scaling, bid+ask present); a driver that downloads 5 years, runs QC per instrument, writes M1–W1 bars and the manifest; decide the dollar-index source and pass the ≥ 0.99 reference check (needs a real DXY reference series); real-quote spread history ≥ 1 year for the cost model.
+`pipeline.py` (source-agnostic): M1 frames from any source → QC → all timeframes + `s_norm` to the immutable store → DXY reference check → manifest (written only if every instrument passes QC and the DXY check passes; failed-QC instruments are not written).
+
+Still to do for the M1 exit criterion: (1) resolve the data-source/licensing question above; (2) one-hour smoke test of whichever source is chosen (URL/record layout, scaling, bid+ask present; web sources agree on the 20-byte big-endian `.bi5` record layout but none confirms the JPY/gold scaling of 1000); (3) run the pipeline over 5 years of the 8 instruments + USDSEK; (4) decide the dollar-index source and obtain a real DXY reference series so the ≥ 0.99 check can pass; (5) ≥ 1 year of real quotes for the spread series (comes with a bid/ask source).
 
 ### Traded instruments (Table 2.1)
 
@@ -336,7 +338,7 @@ Target shape: `on_bar_close(state, bars, session) → (state, actions)` plus the
 | Item | Needed by | Status / notes |
 |------|-----------|----------------|
 | **Dollar-index source** | M1 exit | **Open decision.** Licensed feed carrying the ICE index vs synthetic construction from the six component pairs (§17.2). A retail FX broker is not assumed to carry DXY. Synthetic must pass the ≥ 0.99 correlation reference check |
-| Data licensing | M1 | Read and record usage terms for every data source (Dukascopy included); practice-environment data may not be redistributable |
+| **Data licensing / source (BLOCKING M1 download)** | M1 | Dukascopy site Terms of Use (read 2026-11-18, undated page, can change at any time): downloads licensed "ONLY for your own personal, non-commercial use"; no "scraper/robot/bot/spider/data mining" access without prior express written consent; site information "may not be used to construct a database of any kind". A scripted downloader and a local raw store are what those clauses restrict, so `dukascopy.download_*` refuse unless `terms_cleared=True`. Options: written consent from Dukascopy; manual use of their Historical Data Export tool; or OANDA v20 M1 `price=BA` candles (the spec's own venue-consistent candidate, needs a practice token in `.env`). Not legal advice. |
 | Scholarly guidance | Before M7, ideally before M6 | Issue 2 (hand-to-hand exchange) for the chosen product, and gold. May narrow the universe (§2.3) |
 | Practice and live venue | M6 / M7 | Candidate: OANDA fxTrade Practice. Third-party spread figure (~0.9 pip EUR/USD) is unverified and must be measured. Funded-account requirement and regional availability to be checked at sign-up. Trading 212 dropped (no forex API) |
 | Currency-conversion charge | M4 | One source lists 0.50%. Whether it applies to realised P&L, margin or full notional must be confirmed; on full notional it would be about £50 on £10,000 and exceed any realistic edge |

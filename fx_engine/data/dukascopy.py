@@ -1,8 +1,20 @@
 """Dukascopy tick downloader (§17.2) - CANDIDATE source, not yet cleared for use.
 
 STATUS: the decoder is unit-tested against synthetic bytes only.  Nothing here has
-been run against the real server.  Before any download:
-  1. Read and record Dukascopy's data usage terms (open decision, §17.6).
+been run against the real server.
+
+TERMS (read 2026-11-18, dukascopy.com/swiss/english/legal-pages/terms-of-use/ - the page
+shows no version/date and says it can change at any time):
+  * downloads are licensed "ONLY for your own personal, non-commercial use";
+  * no "scraper", "robot", "bot", "spider", "data mining" or other automated access
+    "without the prior express written consent of DUKASCOPY";
+  * the website and its information "may not be used to construct a database of any kind".
+A scripted bulk downloader is the kind of access those clauses restrict, so download_day()
+and download_range() refuse to run unless terms_cleared=True is passed explicitly
+(e.g. after obtaining written consent).  Not legal advice.
+
+Before any download:
+  1. Resolve the terms question above (open decision, §17.6).
   2. Verify with ONE hour of one instrument that the format assumptions hold:
      - URL layout (month is 0-indexed),
      - 20-byte big-endian records: ms offset, ask, bid (uint32 each), ask vol, bid vol (float32),
@@ -80,8 +92,17 @@ def day_path(root: Path, instrument: str, day: date) -> Path:
     return Path(root) / instrument / "tick" / f"{day.year:04d}" / f"{day.month:02d}" / f"{day.day:02d}.parquet"
 
 
-def download_day(root: Path, instrument: str, day: date, pause: float = 0.2) -> Path | None:
+def _require_clearance(terms_cleared: bool) -> None:
+    if not terms_cleared:
+        raise PermissionError(
+            "Dukascopy terms forbid automated access/database building without written consent; "
+            "pass terms_cleared=True only once that is resolved (see module docstring).")
+
+
+def download_day(root: Path, instrument: str, day: date, pause: float = 0.2,
+                 terms_cleared: bool = False) -> Path | None:
     """Download one UTC day into the immutable store.  Skips days already stored.  NOT YET RUN."""
+    _require_clearance(terms_cleared)
     path = day_path(root, instrument, day)
     if path.exists():
         return path
@@ -97,10 +118,12 @@ def download_day(root: Path, instrument: str, day: date, pause: float = 0.2) -> 
     return path
 
 
-def download_range(root: Path, instrument: str, start: date, end: date) -> list[Path]:
+def download_range(root: Path, instrument: str, start: date, end: date,
+                   terms_cleared: bool = False) -> list[Path]:
+    _require_clearance(terms_cleared)
     out, d = [], start
     while d <= end:
-        p = download_day(root, instrument, d)
+        p = download_day(root, instrument, d, terms_cleared=terms_cleared)
         if p:
             out.append(p)
         d += timedelta(days=1)
