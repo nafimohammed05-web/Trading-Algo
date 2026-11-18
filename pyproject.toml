@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fx-engine"
+version = "0.0.1"
+description = "FX Decision Engine v2.0 — ICT-inspired rules-based trading algorithm"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+]
+data = [
+    "pandas>=2.1",
+    "numpy>=1.26",
+    "pyarrow>=14.0",
+]
+broker = [
+    "oandapyV20>=0.6",   # OANDA fxTrade REST v20 (M6 target)
+]
+
+[tool.pytest.ini_options]
+testpaths   = ["tests"]
+addopts     = "-v --tb=short"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["fx_engine*"]

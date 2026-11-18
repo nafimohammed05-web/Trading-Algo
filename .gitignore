@@ -1,0 +1,29 @@
+# Secrets — NEVER committed
+.env
+*.env
+secrets/
+
+# Data (large, binary, immutable raw store)
+data/raw/
+data/cache/
+*.parquet
+*.feather
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+
+# Logs
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
