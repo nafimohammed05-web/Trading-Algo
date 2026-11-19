@@ -6,6 +6,7 @@ secrets/
 # Data (large, binary, immutable raw store)
 data/raw/
 data/cache/
+data/store/
 *.parquet
 *.feather
 

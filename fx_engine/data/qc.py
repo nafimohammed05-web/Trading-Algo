@@ -20,7 +20,7 @@ from .timeutil import dst_transition_dates, require_utc, to_ny
 @dataclass
 class QCThresholds:
     gap_minutes: int = 15            # a run of missing M1 minutes this long counts as a gap
-    max_missing_frac: float = 0.01   # fail if > 1% of expected open-market minutes are missing
+    max_missing_frac: float = 0.03   # fail if > 3% of expected open-market minutes are missing (OANDA omits no-quote minutes; March 2024 EURUSD was 0.97%)
     max_crossed_frac: float = 1e-4   # fail if ask<bid ticks exceed this fraction
     spread_outlier_mult: float = 10  # M1 spread > mult x median spread -> outlier (informational)
     jump_mult: float = 20            # |M1 return| > mult x robust sigma -> jump (informational)
