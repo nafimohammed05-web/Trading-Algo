@@ -37,7 +37,8 @@ def _write_qc(root: Path, report: QCReport) -> None:
 
 def build_dataset(root: Path, m1_by_instrument: dict[str, pd.DataFrame], sources: dict[str, str],
                   tick_qc: dict[str, TickQC] | None = None, thresholds: QCThresholds | None = None,
-                  dxy_reference: pd.Series | None = None, timeframes=TIMEFRAMES) -> dict:
+                  dxy_reference: pd.Series | None = None, timeframes=TIMEFRAMES,
+                  dxy_standin: dict | None = None) -> dict:
     """Build the dataset.  Returns the manifest dict (written to root/manifest.json if all checks pass)."""
     root = Path(root)
     tick_qc = tick_qc or {}
@@ -74,6 +75,16 @@ def build_dataset(root: Path, m1_by_instrument: dict[str, pd.DataFrame], sources
             dxy_info["reference_check"] = chk.to_dict()
             dxy_info["passed"] = chk.passed
             if chk.passed:
+                p = root / "DXY" / "M1" / "bars.parquet"
+                checksums[rel(p)] = write_immutable(syn.dropna().to_frame("mid_close"), p)
+        elif dxy_standin is not None:
+            # INTERIM, documented deviation: an independent stand-in check (e.g. Fed H.10), NOT the spec's
+            # real-DXY reference check.  The manifest says so; the real check stays owed.
+            dxy_info["check_kind"] = "standin"
+            dxy_info["standin_check"] = dxy_standin
+            dxy_info["real_dxy_check_owed"] = True
+            dxy_info["passed"] = bool(dxy_standin.get("passed_standin"))
+            if dxy_info["passed"]:
                 p = root / "DXY" / "M1" / "bars.parquet"
                 checksums[rel(p)] = write_immutable(syn.dropna().to_frame("mid_close"), p)
         else:

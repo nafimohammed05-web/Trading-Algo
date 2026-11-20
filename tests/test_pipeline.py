@@ -81,3 +81,16 @@ class TestDownloadGuard:
         with pytest.raises(PermissionError):
             dukascopy.download_range(tmp_path, "EURUSD", date(2024, 1, 5), date(2024, 1, 6))
         assert not any(tmp_path.iterdir())  # nothing created, no network touched
+
+
+class TestStandin:
+    def test_standin_pass_writes_manifest_flagged_real_check_owed(self, tmp_path):
+        m1s = _m1s()
+        man = pipeline.build_dataset(tmp_path, m1s, {}, dxy_standin={"passed_standin": True, "return_corr": 0.999})
+        assert man["all_checks_passed"] and (tmp_path / "manifest.json").exists()
+        assert man["dxy"]["check_kind"] == "standin" and man["dxy"]["real_dxy_check_owed"] is True
+
+    def test_standin_fail_writes_nothing(self, tmp_path):
+        m1s = _m1s()
+        man = pipeline.build_dataset(tmp_path, m1s, {}, dxy_standin={"passed_standin": False})
+        assert not man["all_checks_passed"] and not (tmp_path / "manifest.json").exists()
