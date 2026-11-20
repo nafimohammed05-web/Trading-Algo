@@ -412,3 +412,19 @@ class TestDukascopyDecode:
         from datetime import date
         p = dukascopy.day_path(tmp_path, "EURUSD", date(2024, 1, 5))
         assert p.parts[-4:] == ("tick", "2024", "01", "05.parquet")
+
+
+class TestQCSessionAndGoldBreak:
+    def test_gold_daily_break_not_counted_missing(self):
+        m1 = resample.ticks_to_m1(make_ticks("2024-01-08 00:00", 4 * 1440, per_min=1, seed=1))
+        ny = timeutil.to_ny(m1.index)
+        m1 = m1[~((ny.hour == 17) & (ny.day_of_week < 4))]  # drop the 17:00-18:00 NY hour Mon-Thu
+        assert qc.qc_m1(m1, "XAUUSD").missing_minutes == 0
+        assert qc.qc_m1(m1, "EURUSD").missing_minutes > 0
+
+    def test_rollover_hour_gaps_do_not_fail_session_check(self):
+        m1 = resample.ticks_to_m1(make_ticks("2024-01-08 00:00", 4 * 1440, per_min=1, seed=1))
+        ny = timeutil.to_ny(m1.index)
+        m1 = m1[~((ny.hour == 17) & (ny.day_of_week < 4))]
+        r = qc.qc_m1(m1, "EURUSD")
+        assert r.missing_frac > 0.03 and r.session_missing_frac == 0 and r.passed

@@ -58,13 +58,13 @@ def download(start: str, end: str) -> None:
             print(f"{inst} {m}: {len(df)} bars", flush=True)
 
 
-def build() -> None:
+def build(store: Path = STORE) -> None:
     m1s = {}
     for inst in INSTRUMENTS:
         files = sorted((RAW / inst / "M1").glob("*.parquet"))
         if files:
             m1s[inst] = pd.concat([read_verified(f) for f in files]).sort_index()
-    man = pipeline.build_dataset(STORE, m1s, {k: "oanda-v20-M1-BA" for k in m1s})
+    man = pipeline.build_dataset(store, m1s, {k: "oanda-v20-M1-BA" for k in m1s})
     for k, v in man["instruments"].items():
         print(k, "QC", "PASS" if v["qc_passed"] else "FAIL", v["qc_failures"])
     print("dxy:", man["dxy"])
@@ -77,5 +77,6 @@ if __name__ == "__main__":
     ap.add_argument("cmd", choices=["download", "build"])
     ap.add_argument("--start", default="2021-11")
     ap.add_argument("--end", default="2026-11")
+    ap.add_argument("--store", default=str(STORE))
     a = ap.parse_args()
-    download(a.start, a.end) if a.cmd == "download" else build()
+    download(a.start, a.end) if a.cmd == "download" else build(Path(a.store))

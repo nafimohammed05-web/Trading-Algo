@@ -88,7 +88,7 @@ def fetch_chunk(instrument: str, start: pd.Timestamp, env: str = "practice", ret
             with urllib.request.urlopen(req, timeout=timeout) as r:
                 return json.loads(r.read())
         except urllib.error.HTTPError as e:
-            if e.code in (400, 401, 403, 404):  # not retryable; message deliberately omits headers
+            if e.code in (400, 403, 404):  # not retryable; message deliberately omits headers
                 raise RuntimeError(f"OANDA request rejected: HTTP {e.code} for {instrument}") from None
             last = e
         except (urllib.error.URLError, TimeoutError) as e:

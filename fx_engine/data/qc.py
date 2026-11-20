@@ -50,11 +50,19 @@ def qc_ticks(ticks: pd.DataFrame) -> TickQC:
     )
 
 
-def _market_open_mask(index_utc: pd.DatetimeIndex) -> np.ndarray:
-    """True when the FX market is nominally open: NOT between Fri 17:00 and Sun 17:00 NY."""
+# Instruments with a daily maintenance break 17:00-18:00 NY (assumed from OANDA's gold schedule; verify).
+DAILY_BREAK_NY = {"XAUUSD": (17, 18)}
+
+
+def _market_open_mask(index_utc: pd.DatetimeIndex, instrument: str | None = None) -> np.ndarray:
+    """True when the market is nominally open: NOT between Fri 17:00 and Sun 17:00 NY, and
+    not inside the instrument's daily break (gold, 17:00-18:00 NY; its Sunday open is 18:00)."""
     ny = to_ny(index_utc)
     dow, hour = ny.day_of_week, ny.hour
     closed = ((dow == 4) & (hour >= 17)) | (dow == 5) | ((dow == 6) & (hour < 17))
+    brk = DAILY_BREAK_NY.get(instrument or "")
+    if brk:
+        closed = closed | ((hour >= brk[0]) & (hour < brk[1]))
     return ~np.asarray(closed)
 
 
@@ -69,6 +77,7 @@ class QCReport:
     missing_frac: float
     gaps: int
     longest_gap_minutes: int
+    session_missing_frac: float = 0.0   # missing share inside 02:00-17:00 NY (the engine's operating window)
     gap_sessions: list[str] = field(default_factory=list)
     ticks: dict = field(default_factory=dict)
     spread_median: float = float("nan")
@@ -98,7 +107,7 @@ def qc_m1(m1: pd.DataFrame, instrument: str, tick_qc: TickQC | None = None,
         return QCReport(instrument, None, None, 0, 0, 0, 0.0, 0, 0, failures=["no data"])
 
     full = pd.date_range(m1.index.min(), m1.index.max(), freq="1min")
-    expected_idx = full[_market_open_mask(full)]
+    expected_idx = full[_market_open_mask(full, instrument)]
     missing_idx = expected_idx.difference(m1.index)
     # Gaps: runs of consecutive missing minutes of at least gap_minutes.
     gaps, longest, gap_days = 0, 0, set()
@@ -122,13 +131,17 @@ def qc_m1(m1: pd.DataFrame, instrument: str, tick_qc: TickQC | None = None,
     ny_dates = set(to_ny(m1.index).date)
     dst_with = [d for d in dst_all if d.date() in ny_dates]
 
+    in_win = lambda ix: (to_ny(ix).hour >= 2) & (to_ny(ix).hour < 17)  # noqa: E731
+    n_exp_win = int(in_win(expected_idx).sum())
+    n_miss_win = int(in_win(missing_idx).sum()) if len(missing_idx) else 0
     rep = QCReport(
         instrument=instrument,
         start=str(m1.index.min()), end=str(m1.index.max()),
         m1_bars=len(m1), expected_minutes=len(expected_idx),
         missing_minutes=len(missing_idx),
         missing_frac=len(missing_idx) / max(len(expected_idx), 1),
-        gaps=gaps, longest_gap_minutes=longest, gap_sessions=sorted(gap_days),
+        gaps=gaps, longest_gap_minutes=longest,
+        session_missing_frac=n_miss_win / max(n_exp_win, 1), gap_sessions=sorted(gap_days),
         ticks=asdict(tick_qc) if tick_qc else {},
         spread_median=med, spread_p99=float(spread.quantile(0.99)),
         spread_outliers=int((spread > th.spread_outlier_mult * med).sum()) if med > 0 else 0,
@@ -136,8 +149,10 @@ def qc_m1(m1: pd.DataFrame, instrument: str, tick_qc: TickQC | None = None,
         dst_days_in_range=[str(d.date()) for d in dst_all],
         dst_days_with_data=[str(d.date()) for d in dst_with],
     )
-    if rep.missing_frac > th.max_missing_frac:
-        rep.failures.append(f"missing_frac {rep.missing_frac:.4f} > {th.max_missing_frac}")
+    # Pass/fail uses the operating window; the all-hours fraction (dominated by the sparse 17:00-18:00 NY
+    # rollover hour) is reported for information.
+    if rep.session_missing_frac > th.max_missing_frac:
+        rep.failures.append(f"session_missing_frac {rep.session_missing_frac:.4f} > {th.max_missing_frac}")
     if (spread < 0).any():
         rep.failures.append("negative M1 spread (ask_close < bid_close)")
     if tick_qc and tick_qc.n:

@@ -114,11 +114,14 @@ Built and unit-tested offline in `fx_engine/data/` (`tests/test_data.py`, synthe
 | `dxy.py` | synthetic DXY (§17.2), stale-component fail-closed, reference check (corr ≥ 0.99) | level-MAE threshold 0.5 is MY placeholder, spec says only "small" |
 | `qc.py` | gaps, weekend-aware, duplicates, crossed quotes, spread outliers, jumps, DST-day coverage, pass/fail | thresholds are engineering placeholders, not §14 params |
 | `manifest.py` | manifest + dataset hash; atomic write; refuses if any QC failed | |
+| `oanda.py` | OANDA v20 M1 `price=BA` candles: parser, paging, token from env | chosen source; mid OHLC = avg of bid/ask OHLC; 401 retried |
 | `dukascopy.py` | URL builder, `.bi5` decoder, hourly fetch, per-day immutable download | **never run against the real server** |
 
 `pipeline.py` (source-agnostic): M1 frames from any source → QC → all timeframes + `s_norm` to the immutable store → DXY reference check → manifest (written only if every instrument passes QC and the DXY check passes; failed-QC instruments are not written).
 
-Still to do for the M1 exit criterion: (1) resolve the data-source/licensing question above; (2) one-hour smoke test of whichever source is chosen (URL/record layout, scaling, bid+ask present; web sources agree on the 20-byte big-endian `.bi5` record layout but none confirms the JPY/gold scaling of 1000); (3) run the pipeline over 5 years of the 8 instruments + USDSEK; (4) decide the dollar-index source and obtain a real DXY reference series so the ≥ 0.99 check can pass; (5) ≥ 1 year of real quotes for the spread series (comes with a bid/ask source).
+**Status 2026-11-20:** 5 years (Nov 2021 - Oct 2026) of OANDA M1 bid/ask downloaded for the 8 instruments + USDSEK (`scripts/oanda_m1.py download`, raw in `data/raw/`, gitignored); `build` ran, all 9 pass QC (pass/fail uses missing minutes inside 02:00-17:00 NY, limit 3% = placeholder; gold's 17:00-18:00 NY break excluded - assumed, verify). Synthetic DXY built but NOT validated: no real DXY reference series yet, so no manifest. Remaining: DXY reference source, then re-run build with the reference; real-quote spread comparison vs the ~0.9 pip claim (measured EURUSD median 1.5 pips).
+
+Original to-do list: (1) resolve the data-source/licensing question above; (2) one-hour smoke test of whichever source is chosen (URL/record layout, scaling, bid+ask present; web sources agree on the 20-byte big-endian `.bi5` record layout but none confirms the JPY/gold scaling of 1000); (3) run the pipeline over 5 years of the 8 instruments + USDSEK; (4) decide the dollar-index source and obtain a real DXY reference series so the ≥ 0.99 check can pass; (5) ≥ 1 year of real quotes for the spread series (comes with a bid/ask source).
 
 ### Traded instruments (Table 2.1)
 
