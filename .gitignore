@@ -7,8 +7,6 @@ secrets/
 data/raw/
 data/cache/
 data/store/
-data/store_full/
-data/store_v2/
 *.parquet
 *.feather
 
