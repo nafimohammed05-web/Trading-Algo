@@ -24,13 +24,17 @@ Trading-Algo/
 │   │   ├── __init__.py
 │   │   └── logging_setup.py     ← JsonFormatter, EngineLogger, setup_logging()
 │   ├── adapters/                ← broker/data adapters (stub today)
-│   ├── data/                    ← M1 target (data/raw/, data/cache/ are gitignored)
+│   ├── data/                    ← M1 data layer (done); store at data/store/, raw at data/raw/ (gitignored)
 │   ├── engine/                  ← M2–M3 target (not yet created)
 │   ├── backtest/                ← M4 target (not yet created)
 │   ├── paper/                   ← M6 target (not yet created)
 │   └── live/                    ← M7 target (not yet created)
+├── scripts/
+│   ├── oanda_m1.py              ← resumable OANDA M1 download + dataset build
+│   └── h10_check.py             ← interim DXY stand-in check (Fed H.10)
 └── tests/
-    └── test_config.py           ← 44 M0 tests, all passing
+    ├── test_config.py           ← 44 M0 tests
+    ├── test_data.py, test_pipeline.py, test_oanda.py   ← M1 offline tests (123 total, all passing)
 ```
 
 Python target: **3.12** (CI also exercises 3.11; `requires-python >= 3.11`).
@@ -119,7 +123,7 @@ Built and unit-tested offline in `fx_engine/data/` (`tests/test_data.py`, synthe
 
 `pipeline.py` (source-agnostic): M1 frames from any source → QC → all timeframes + `s_norm` to the immutable store → DXY reference check → manifest (written only if every instrument passes QC and the DXY check passes; failed-QC instruments are not written).
 
-**Status 2026-11-20:** 5 years (Nov 2021 - Oct 2026) of OANDA M1 bid/ask downloaded for the 8 instruments + USDSEK (`scripts/oanda_m1.py download`, raw in `data/raw/`, gitignored); `build` ran, all 9 pass QC (pass/fail uses missing minutes inside 02:00-17:00 NY, limit 3% = placeholder; gold's 17:00-18:00 NY break excluded - CONFIRMED from data: zero XAUUSD bars at NY hour 17 Mon-Thu, Sunday open 18:00). Synthetic DXY built but NOT validated: no real DXY reference series yet, so no manifest. Remaining: DXY reference source, then re-run build with the reference; Measured median M1 spread, 02:00-17:00 NY, 5y (practice account quotes): EURUSD 1.5 pip (1.4 bp), GBPUSD 1.8 pip, USDJPY 1.7 pip, USDCHF 1.5, AUDUSD 1.3, USDCAD 1.8, NZDUSD 1.5, XAUUSD $0.36 (5y) / $0.67 (last 12m), USDSEK 0.0032 - i.e. well above the third-party ~0.9 pip claim; practice vs live pricing not compared. DXY source: OANDA v20 has no DXY instrument (checked the account's 123 instruments). ICE licenses DXY history commercially. Investing.com forbids storing the data. Stooq terms could not be read (fetch returned empty) so it is NOT cleared. FRED's trade-weighted indices are not the ICE DXY. INTERIM DECISION (user, 2026-11-20): option 3 - stand-in check against Fed H.10 noon-NY rates (federalreserve.gov DDP package `Output.aspx?rel=H10&filetype=zip`, Board site 'public domain, cite the Board'; FRED not used because its terms forbid storing/scripted access). `scripts/h10_check.py`: 1249 days 2021-11 to 2026-10, return corr 0.9989, level MAE 0.012, max 0.11 (OANDA noon-NY M1 mid vs H.10; validates OANDA data + formula, not the match to ICE DXY). Real check owed: TradingView Plus export (Basic plan cannot export), ICE licence, or an MT5 demo USDX series. The DDP package is being retired 31 Mar 2027; H.10 data stays on the release pages.
+**Status 2026-11-20:** 5 years (Nov 2021 - Oct 2026) of OANDA M1 bid/ask downloaded for the 8 instruments + USDSEK (`scripts/oanda_m1.py download`, raw in `data/raw/`, gitignored); `build` ran, all 9 pass QC (pass/fail uses missing minutes inside 02:00-17:00 NY, limit 3% = placeholder; gold's 17:00-18:00 NY break excluded - CONFIRMED from data: zero XAUUSD bars at NY hour 17 Mon-Thu, Sunday open 18:00). Synthetic DXY built and checked against the interim stand-in (below); manifest written. Measured median M1 spread, 02:00-17:00 NY, 5y (practice account quotes): EURUSD 1.5 pip (1.4 bp), GBPUSD 1.8 pip, USDJPY 1.7 pip, USDCHF 1.5, AUDUSD 1.3, USDCAD 1.8, NZDUSD 1.5, XAUUSD $0.36 (5y) / $0.67 (last 12m), USDSEK 0.0032 - i.e. well above the third-party ~0.9 pip claim; practice vs live pricing not compared. DXY source: OANDA v20 has no DXY instrument (checked the account's 123 instruments). ICE licenses DXY history commercially. Investing.com forbids storing the data. Stooq terms could not be read (fetch returned empty) so it is NOT cleared. FRED's trade-weighted indices are not the ICE DXY. INTERIM DECISION (user, 2026-11-20): option 3 - stand-in check against Fed H.10 noon-NY rates (federalreserve.gov DDP package `Output.aspx?rel=H10&filetype=zip`, Board site 'public domain, cite the Board'; FRED not used because its terms forbid storing/scripted access). `scripts/h10_check.py`: 1249 days 2021-11 to 2026-10, return corr 0.9989, level MAE 0.012, max 0.11 (OANDA noon-NY M1 mid vs H.10; validates OANDA data + formula, not the match to ICE DXY). Real check owed: TradingView Plus export (Basic plan cannot export), ICE licence, or an MT5 demo USDX series. The DDP package is being retired 31 Mar 2027; H.10 data stays on the release pages.
 
 Original to-do list: (1) resolve the data-source/licensing question above; (2) one-hour smoke test of whichever source is chosen (URL/record layout, scaling, bid+ask present; web sources agree on the 20-byte big-endian `.bi5` record layout but none confirms the JPY/gold scaling of 1000); (3) run the pipeline over 5 years of the 8 instruments + USDSEK; (4) decide the dollar-index source and obtain a real DXY reference series so the ≥ 0.99 check can pass; (5) ≥ 1 year of real quotes for the spread series (comes with a bid/ask source).
 
@@ -137,16 +141,15 @@ REFERENCE = ["DXY", "USDSEK"]   # USDSEK only to build the synthetic DXY
 
 Notes from the spec: USD/CHF and EUR/USD are never held together in identical directions (P3); NZD/USD is Tier-2 (thin). Signal timeframe default M5 for EUR/USD and GBP/USD, M15 for the rest (§4.2). Pair partner for divergence: EUR/USD↔GBP/USD.
 
-### Raw store layout
+### Store layout (gitignored; local only)
 
 ```
-data/raw/
-├── EURUSD/
-│   ├── tick/          ← raw bid/ask ticks (UTC)
-│   ├── M1/  M5/  M15/  H1/  H4/  D1/  W1/
-├── GBPUSD/ ... (one folder per traded instrument)
-├── USDSEK/            ← read-only, for synthetic DXY
-└── DXY/               ← index or synthetic, M1/M5/M15/H1/D1
+data/raw/<INST>/M1/YYYY-MM.parquet     ← immutable OANDA M1 bid/ask, UTC, sha256 sidecars
+data/store/<INST>/<TF>/bars.parquet     ← M1, M5, M15, H1, H4, D1, W1 (bid/ask/mid OHLC, ticks, spread)
+data/store/<INST>/snorm.parquet         ← s_norm table (session x 5-min bucket)
+data/store/DXY/M1/bars.parquet          ← synthetic index (mid close)
+data/store/qc/<INST>.json, manifest.json
+data/reference/                         ← Fed H.10 package + stand-in result
 ```
 
 ---
@@ -340,7 +343,7 @@ Target shape: `on_bar_close(state, bars, session) → (state, actions)` plus the
 
 | Item | Needed by | Status / notes |
 |------|-----------|----------------|
-| **Dollar-index source** | M1 exit | **Open decision.** Licensed feed carrying the ICE index vs synthetic construction from the six component pairs (§17.2). A retail FX broker is not assumed to carry DXY. Synthetic must pass the ≥ 0.99 correlation reference check |
+| **Dollar-index source** | M5 (real check owed) | **Partly resolved.** Synthetic index from the six pairs (§17.2) built; checked only against an independent Fed H.10 stand-in (corr 0.9989). The spec's real-DXY reference check is OWED before M5: TradingView Plus export, ICE licence, or an MT5 demo USDX series. Tracked as a GitHub issue |
 | **Data licensing / source — DECIDED: OANDA v20 (2026-11-18)** | M1 | Dukascopy site Terms of Use (read 2026-11-18, undated page, can change at any time): downloads licensed "ONLY for your own personal, non-commercial use"; no "scraper/robot/bot/spider/data mining" access without prior express written consent; site information "may not be used to construct a database of any kind". A scripted downloader and a local raw store are what those clauses restrict, so `dukascopy.download_*` refuse unless `terms_cleared=True`. DECISION: use OANDA v20 M1 `price=BA` via `fx_engine/data/oanda.py` (parser + paging built, tested offline; needs `OANDA_API_TOKEN` in `.env`; 5-year M1 depth unverified; mid OHLC = avg of bid/ask OHLC). Dukascopy stays gated. Rejected options: written consent from Dukascopy; manual use of their Historical Data Export tool. OANDA is the spec's own venue-consistent candidate. Not legal advice. |
 | Scholarly guidance | Before M7, ideally before M6 | Issue 2 (hand-to-hand exchange) for the chosen product, and gold. May narrow the universe (§2.3) |
 | Practice and live venue | M6 / M7 | Candidate: OANDA fxTrade Practice. Third-party spread figure (~0.9 pip EUR/USD) is unverified and must be measured. Funded-account requirement and regional availability to be checked at sign-up. Trading 212 dropped (no forex API) |
